@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod dmverity;
+pub mod cryptsetup;
 use crate::verity::dmverity::{create_verity_device, destroy_verity_device, DmVerityOption};
 use anyhow::Result;
 use base64::Engine;

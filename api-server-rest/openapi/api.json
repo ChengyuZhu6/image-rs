@@ -44,8 +44,8 @@
                   "type": "string"
                 },
                 "example": {
-                  "report_data": "eHh4eA==",
-                  "svn": "1"
+                  "svn": "1",
+                  "report_data": "eHh4eA=="
                 }
               }
             }
@@ -91,8 +91,8 @@
                   "type": "string"
                 },
                 "example": {
-                  "tee_keypair": "-----BEGIN RSA... ",
-                  "token": "eyJhbGciOiJFUzI1NiI..."
+                  "token": "eyJhbGciOiJFUzI1NiI...",
+                  "tee_keypair": "-----BEGIN RSA... "
                 }
               }
             }
