@@ -11,7 +11,7 @@ use oci_spec::image::{ImageConfiguration, Os};
 use serde::Deserialize;
 use std::collections::{BTreeSet, HashMap};
 use std::convert::TryFrom;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use crate::bundle::{create_runtime_config, BUNDLE_ROOTFS};
 use crate::config::{ImageConfig, CONFIGURATION_FILE_PATH};
 use crate::decoder::Compression;
-use crate::meta_store::{MetaStore, METAFILE};
+use crate::meta_store::{self, MetaStore, METAFILE};
 use crate::pull::PullClient;
 use crate::snapshots::{SnapshotType, Snapshotter};
 
@@ -98,9 +98,24 @@ impl Default for ImageClient {
     // construct a default instance of `ImageClient`
     fn default() -> ImageClient {
         let config = ImageConfig::try_from(Path::new(CONFIGURATION_FILE_PATH)).unwrap_or_default();
-        let meta_store = MetaStore::try_from(Path::new(METAFILE)).unwrap_or_default();
+        let (meta_store, snapshots) = Self::init_meta_and_snapshots(&config);
 
-        #[allow(unused_mut)]
+        ImageClient {
+            config,
+            meta_store,
+            snapshots,
+        }
+    }
+}
+
+impl ImageClient {
+    pub fn init_meta_and_snapshots(
+        config: &ImageConfig,
+    ) -> (
+        Arc<Mutex<MetaStore>>,
+        HashMap<SnapshotType, Box<dyn Snapshotter>>,
+    ) {
+        let meta_store = MetaStore::try_from(Path::new(METAFILE)).unwrap_or_default();
         let mut snapshots = HashMap::new();
 
         #[cfg(feature = "snapshot-overlayfs")]
@@ -137,16 +152,17 @@ impl Default for ImageClient {
                 Box::new(occlum_unionfs) as Box<dyn Snapshotter>,
             );
         }
-
-        ImageClient {
+        (Arc::new(Mutex::new(meta_store)), snapshots)
+    }
+    pub fn new(image_work_dir: PathBuf) -> Self {
+        let config = ImageConfig::new(image_work_dir);
+        let (meta_store, snapshots) = Self::init_meta_and_snapshots(&config);
+        Self {
             config,
-            meta_store: Arc::new(Mutex::new(meta_store)),
+            meta_store,
             snapshots,
         }
     }
-}
-
-impl ImageClient {
     /// pull_image pulls an image with optional auth info and decrypt config
     /// and store the pulled data under user defined work_dir/layers.
     /// It will return the image ID with prepeared bundle: a rootfs directory,
@@ -512,7 +528,6 @@ mod tests {
     #[tokio::test]
     async fn test_pull_image() {
         let work_dir = tempfile::tempdir().unwrap();
-        std::env::set_var("CC_IMAGE_WORK_DIR", work_dir.path());
 
         // TODO test with more OCI image registries and fix broken registries.
         let oci_images = [
@@ -533,7 +548,7 @@ mod tests {
             // "releases-docker.jfrog.io/reg2/busybox:1.33.1"
         ];
 
-        let mut image_client = ImageClient::default();
+        let mut image_client = ImageClient::new(work_dir.path().to_path_buf());
         for image in oci_images.iter() {
             let bundle_dir = tempfile::tempdir().unwrap();
 
@@ -559,7 +574,6 @@ mod tests {
     #[tokio::test]
     async fn test_nydus_image() {
         let work_dir = tempfile::tempdir().unwrap();
-        std::env::set_var("CC_IMAGE_WORK_DIR", work_dir.path());
 
         let nydus_images = [
             "eci-nydus-registry.cn-hangzhou.cr.aliyuncs.com/v6/java:latest-test_nydus",
@@ -567,7 +581,7 @@ mod tests {
             //"eci-nydus-registry.cn-hangzhou.cr.aliyuncs.com/test/python:latest_nydus",
         ];
 
-        let mut image_client = ImageClient::default();
+        let mut image_client = ImageClient::new(work_dir.path().to_path_buf());
 
         for image in nydus_images.iter() {
             let bundle_dir = tempfile::tempdir().unwrap();
@@ -593,11 +607,10 @@ mod tests {
     #[tokio::test]
     async fn test_image_reuse() {
         let work_dir = tempfile::tempdir().unwrap();
-        std::env::set_var("CC_IMAGE_WORK_DIR", work_dir.path());
 
         let image = "mcr.microsoft.com/hello-world";
 
-        let mut image_client = ImageClient::default();
+        let mut image_client = ImageClient::new(work_dir.path().to_path_buf());
 
         let bundle1_dir = tempfile::tempdir().unwrap();
         if let Err(e) = image_client
