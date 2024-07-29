@@ -84,10 +84,10 @@ async fn async_processing(
 ) -> Result<String> {
     let mut hash_reader = HashReader::new(layer_reader, hasher);
     if let Err(e) = unpack(&mut hash_reader, destination.as_path()).await {
-        error!("failed to unpack layer: {e:?}");
+        error!("failed to unpack layer: {e:?} to {:?}", destination.as_path());
         tokio::fs::remove_dir_all(destination.as_path())
             .await
-            .context("Failed to roll back when unpacking")?;
+            .context(destination.as_path().display().to_string())?;
         return Err(e);
     }
 
