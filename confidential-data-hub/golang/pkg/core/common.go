@@ -15,6 +15,13 @@ const (
 	SealedSecretPrefix = "sealed."
 )
 
+type Storage struct {
+	VolumeType string            `json:"volume_type"`
+	Options    map[string]string `json:"options"`
+	Flags      []string          `json:"flags"`
+	Mountpoint string            `json:"mountpoint"`
+}
+
 // Common interface for clients that can unseal secrets
 type SecretUnsealer interface {
 	UnsealSecret(ctx context.Context, secret string) (string, error)
